@@ -18,9 +18,10 @@ import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
+import androidx.annotation.NonNull;
+import androidx.preference.PreferenceManager;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.iid.FirebaseInstanceId;
 import com.google.firebase.iid.InstanceIdResult;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -84,6 +85,16 @@ public class CloudMessagingModule extends KrollModule
 					data.put("inBackground", true);
 				}
 			}
+
+			if (data.get("message") == null) {
+				SharedPreferences preferences =
+					PreferenceManager.getDefaultSharedPreferences(Utils.getApplicationContext());
+				String prefMessage = preferences.getString("titanium.firebase.cloudmessaging.message", null);
+				if (prefMessage != null) {
+					data.put("message", new KrollDict(new JSONObject(prefMessage)));
+				}
+				preferences.edit().remove("titanium.firebase.cloudmessaging.message").commit();
+			}
 		} catch (Exception ex) {
 			Log.e(LCAT, "getLastData" + ex);
 		}
@@ -96,23 +107,19 @@ public class CloudMessagingModule extends KrollModule
 	public void registerForPushNotifications()
 	{
 		ShortcutBadger.removeCount(Utils.getApplicationContext());
-		FirebaseInstanceId.getInstance()
-			.getInstanceId()
-			.addOnSuccessListener(TiApplication.getAppRootOrCurrentActivity(),
-								  new OnSuccessListener<InstanceIdResult>() {
-									  @Override
-									  public void onSuccess(InstanceIdResult instanceIdResult)
-									  {
-										  fcmToken = instanceIdResult.getToken();
-										  onTokenRefresh(fcmToken);
-									  }
-								  })
-			.addOnFailureListener(new OnFailureListener() {
-				public void onFailure(Exception e)
+		FirebaseInstanceId.getInstance().getInstanceId().addOnCompleteListener(
+			new OnCompleteListener<InstanceIdResult>() {
+				@Override
+				public void onComplete(@NonNull Task<InstanceIdResult> task)
 				{
-					KrollDict data = new KrollDict();
-					data.put("error", e.getMessage());
-					fireEvent("error", data);
+					if (!task.isSuccessful()) {
+						Log.w(LCAT, "getInstanceId failed: ", task.getException());
+						return;
+					}
+
+					// Get new Instance ID token
+					fcmToken = task.getResult().getToken();
+					onTokenRefresh(fcmToken);
 				}
 			});
 		parseBootIntent();
@@ -199,10 +206,10 @@ public class CloudMessagingModule extends KrollModule
 		}
 		Log.d(LCAT, "createNotificationChannel " + options.toString());
 		Context context = Utils.getApplicationContext();
-		String sound = (String) options.optString("sound", "default");
-		String importance = (String) options.optString("importance", sound.equals("silent") ? "low" : "default");
-		String channelId = (String) options.optString("channelId", "default");
-		String channelName = (String) options.optString("channelName", channelId);
+		String sound = options.optString("sound", "default");
+		String importance = options.optString("importance", sound.equals("silent") ? "low" : "default");
+		String channelId = options.optString("channelId", "default");
+		String channelName = options.optString("channelName", channelId);
 		Boolean vibration = (Boolean) options.optBoolean("vibrate", false);
 		Boolean lights = (Boolean) options.optBoolean("lights", false);
 		Boolean showBadge = (Boolean) options.optBoolean("showBadge", false);
@@ -309,10 +316,7 @@ public class CloudMessagingModule extends KrollModule
 
 	public static CloudMessagingModule getInstance()
 	{
-		if (instance != null)
-			return instance;
-		else
-			return new CloudMessagingModule();
+		return instance;
 	}
 
 	public void setNotificationData(String data)
@@ -336,5 +340,8 @@ public class CloudMessagingModule extends KrollModule
 		} catch (Exception ex) {
 			Log.e(LCAT, "parseBootIntent" + ex);
 		}
+
+		SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(Utils.getApplicationContext());
+		preferences.edit().remove("titanium.firebase.cloudmessaging.message").commit();
 	}
 }
