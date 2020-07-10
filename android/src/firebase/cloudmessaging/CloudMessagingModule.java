@@ -35,6 +35,7 @@ import org.appcelerator.titanium.TiApplication;
 import org.appcelerator.titanium.util.TiConvert;
 import org.json.JSONObject;
 import ti.modules.titanium.android.notificationmanager.NotificationChannelProxy;
+import me.leolin.shortcutbadger.ShortcutBadger;
 
 @Kroll.module(name = "CloudMessaging", id = "firebase.cloudmessaging")
 public class CloudMessagingModule extends KrollModule
@@ -94,6 +95,7 @@ public class CloudMessagingModule extends KrollModule
 	@Kroll.method
 	public void registerForPushNotifications()
 	{
+		ShortcutBadger.removeCount(Utils.getApplicationContext());
 		FirebaseInstanceId.getInstance()
 			.getInstanceId()
 			.addOnSuccessListener(TiApplication.getAppRootOrCurrentActivity(),
